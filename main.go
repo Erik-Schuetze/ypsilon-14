@@ -10,6 +10,7 @@ import (
 )
 
 var LogRoutineRunning = false
+var MenuItems = []string{"Station Overview", "Docking Bay History", "Floorplan", "Basic Operations", "Critical Operations"}
 
 func main() {
 	g, err := gocui.NewGui(gocui.OutputNormal)
@@ -84,9 +85,9 @@ func layout(g *gocui.Gui) error {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
-		fmt.Fprintln(titleView, " Name: Ypsilon 14 | Type: Asteroid Mining Station | Status: Healthy | Team Leader: Sonya")
+		fmt.Fprintln(titleView, " Ypsilon 14 | Company Property: Unauthorized access, modification, or use is strictly prohibited.")
 	}
-	if menuView, err := g.SetView("menu", 2, 4, maxX/3, (maxY/5)*4); err != nil {
+	if menuView, err := g.SetView("menu", 2, 4, maxX/3, (maxY/5)*4-3); err != nil {
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -94,10 +95,22 @@ func layout(g *gocui.Gui) error {
 		menuView.Highlight = true
 		menuView.SelBgColor = gocui.ColorYellow
 		menuView.SelFgColor = gocui.ColorBlack
-		fmt.Fprintln(menuView, "Station Overview")
-		fmt.Fprintln(menuView, "Cargo History")
-		fmt.Fprintln(menuView, "Base Operations")
-		fmt.Fprintln(menuView, "Critical Operations (locked)")
+
+		for _, menuItem := range MenuItems {
+			fmt.Fprintf(menuView, "- %s\n", menuItem)
+		}
+
+		if _, err := g.SetCurrentView("menu"); err != nil {
+			return err
+		}
+
+	}
+	if keyView, err := g.SetView("key", 2, (maxY/5)*4-2, maxX/3, (maxY/5)*4); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		keyView.Title = " NAVIGATION "
+		fmt.Fprintln(keyView, " ENTER=Select    BACKSPACE=Exit")
 
 		if _, err := g.SetCurrentView("menu"); err != nil {
 			return err
@@ -113,10 +126,7 @@ func layout(g *gocui.Gui) error {
 		}
 	}
 	if mainView, err := g.SetView("main", maxX/3+2, 4, maxX-2, (maxY/5)*4); err != nil {
-		mainView.Highlight = true
-		mainView.Highlight = true
-		mainView.SelBgColor = gocui.ColorYellow
-		mainView.SelFgColor = gocui.ColorBlack
+		mainView.Highlight = false
 		if err != gocui.ErrUnknownView {
 			return err
 		}
@@ -149,14 +159,93 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 
 func selectMenuItem(g *gocui.Gui, v *gocui.View) error {
 	if v == nil || v.Name() == "menu" {
+		_, y := v.Cursor()
 		_, err := g.SetCurrentView("main")
+		updateMainView(g, y)
 		return err
 	}
 	return nil
 }
 
+var MenuItemContent = []string{
+	`
+	STATION NAME: Ypsilon 14
+	STATION TYPE: Asteroid Mining Station
+	MINING MODULE: OrionMiningCorp X7 rev 2.1
+	QUARTERS MODULE: OrionMiningCorp E2 rev 1.1
+	OVERALL STATUS: normal
+
+	CURRENT CREWMEMBERS:
+	- Sonya
+	- Mike
+	- Ashraf
+	- Dana
+	- Jerome
+	- Kantaro
+	- Morgan
+	- Rie
+	- Rosa
+	`,
+	`
+	UPCOMING SHIPMENTS:
+	in 2 weeks     arrival     drill parts
+	
+	DOCKING BAY LOG:
+	3 months ago   departure   technician support
+	2 months ago   arrival     cargo transport
+	2 months ago   departure   cargo transport
+	5 weeks ago    arrival     ********
+	1 hour ago     arrival     supply transport
+	`,
+	`
+	Bay 1  Bay 2
+	--+--  --+--  +--+--+--+--+ +----+
+	  |      |    |  |  |  |  | |    |
+	         |    +--+  +--+--+-+Mess|
+   	+--+------+--+ |  |               |
+   	|            +-+--+  +--+--+------+
+   	| Workspace          |  |  |
+   	|            +-+--+  +--+--+------+
+   	+----+ +-----+ |  |               |
+	    | |       +--+  +--+--+-+Wash|
+	   ++ ++      |  |  |  |  | |room|
+	   |   |      +--+--+--+--+ +----+
+	   +---+
+	`,
+	`
+	`,
+	`
+	
+	`,
+}
+
+func updateMainView(g *gocui.Gui, menuItemID int) error {
+	g.Update(func(g *gocui.Gui) error {
+		v, err := g.View("main")
+		if err != nil {
+			return err
+		}
+		switch menuItemID {
+		case 0:
+			fmt.Fprintln(v, MenuItemContent[menuItemID])
+		case 1:
+			fmt.Fprintln(v, MenuItemContent[menuItemID])
+		case 2:
+			fmt.Fprintln(v, MenuItemContent[menuItemID])
+		case 3:
+			fmt.Fprintln(v, MenuItemContent[menuItemID])
+		case 4:
+			fmt.Fprintln(v, MenuItemContent[menuItemID])
+		}
+
+		return nil
+	})
+	return nil
+}
+
 func exitMain(g *gocui.Gui, v *gocui.View) error {
 	if v.Name() == "main" {
+		v.Clear()
 		_, err := g.SetCurrentView("menu")
 		return err
 	}
