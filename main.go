@@ -10,6 +10,7 @@ import (
 )
 
 var LogRoutineRunning = false
+var BlinkRoutineRunning = false
 var MenuItems = []string{"Station Overview", "Docking Bay History", "Floorplan", "Basic Operations", "Critical Operations"}
 
 func main() {
@@ -23,13 +24,20 @@ func main() {
 
 	g.SetManagerFunc(layout)
 
-	if err := keyBindings(g); err != nil {
+	if err := initKeyBindings(g); err != nil {
 		log.Panicln(err)
 	}
 
+	// start one concurrent thread that handles writing Log lines to the System Messages
 	if !LogRoutineRunning {
 		LogRoutineRunning = true
 		go writeLogLines(g)
+	}
+
+	// start one concurrent thread for the small Logo Box in the upper right corner
+	if !BlinkRoutineRunning {
+		LogRoutineRunning = true
+		go blinkEffect(g)
 	}
 
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
@@ -37,8 +45,40 @@ func main() {
 	}
 }
 
-func writeLogLines(g *gocui.Gui) error {
+func blinkEffect(g *gocui.Gui) error {
+	blinkString := ""
+	for {
+		g.Update(func(g *gocui.Gui) error {
+			blinkView, err := g.View("blink")
+			if err != nil {
+				return err
+			}
+			blinkView.Clear()
+			fmt.Fprintf(blinkView, "%s", blinkString)
 
+			switch blinkString {
+			case "":
+				blinkString = "Y  "
+			case "Y  ":
+				blinkString = "Y1 "
+			case "Y1 ":
+				blinkString = "Y14"
+			case "Y14":
+				blinkString = ""
+
+			}
+
+			return nil
+		})
+
+		randomTimeInterval := rand.Intn(600-300) + 300
+		time.Sleep(time.Duration(randomTimeInterval) * time.Millisecond)
+	}
+
+	return nil
+}
+
+func writeLogLines(g *gocui.Gui) error {
 	logMessages := []string{
 		"INFO:    All core systems operating within normal parameters.",
 		"INFO:    No external weather anomalies detected. Station shields at standard levels.",
@@ -71,7 +111,7 @@ func writeLogLines(g *gocui.Gui) error {
 				fmt.Fprintf(logView, "\n %s", entry)
 				return nil
 			})
-			randomTimeInterval := rand.Intn(1200-400) + 400
+			randomTimeInterval := rand.Intn(1400-400) + 400
 			time.Sleep(time.Duration(randomTimeInterval) * time.Millisecond)
 		}
 	}
@@ -80,12 +120,18 @@ func writeLogLines(g *gocui.Gui) error {
 
 func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
-	if titleView, err := g.SetView("title", 2, 1, maxX-2, 3); err != nil {
+	if titleView, err := g.SetView("title", 2, 1, maxX-7, 3); err != nil {
 		titleView.Title = " MINING STATION TERMINAL v8.5.2 "
 		if err != gocui.ErrUnknownView {
 			return err
 		}
 		fmt.Fprintln(titleView, " Ypsilon 14 | Company Property: Unauthorized access, modification, or use is strictly prohibited.")
+	}
+	if blinkView, err := g.SetView("blink", maxX-6, 1, maxX-2, 3); err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+		fmt.Fprintln(blinkView, "")
 	}
 	if menuView, err := g.SetView("menu", 2, 4, maxX/3, (maxY/5)*4-3); err != nil {
 		if err != gocui.ErrUnknownView {
@@ -134,7 +180,7 @@ func layout(g *gocui.Gui) error {
 	return nil
 }
 
-func keyBindings(g *gocui.Gui) error {
+func initKeyBindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
 		log.Panicln(err)
 	}
