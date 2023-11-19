@@ -27,6 +27,14 @@ var ControlMap = map[string]string{
 	" ":           " ",
 }
 
+/*
+TODO
+
+PIN for self destruction / ID CARD
+
+think about additional Info / Flavor / Controls / Menu Options
+*/
+
 func main() {
 	g, err := gocui.NewGui(gocui.OutputNormal)
 	if err != nil {
@@ -261,7 +269,8 @@ func selectMenuItem(g *gocui.Gui, activeView *gocui.View) error {
 
 			g.Cursor = false
 			_, err = g.SetCurrentView("main")
-			mainView.SetCursor(0, 0)
+			mainView.SetOrigin(0, 0)
+			mainView.SetCursor(mainView.Origin())
 			return err
 		} else if activeView.Name() == "main" && menuY == 3 {
 			_, mainY := activeView.Cursor()
@@ -309,6 +318,13 @@ func stationOverview(g *gocui.Gui, v *gocui.View) error {
 func dockingBayHistory(g *gocui.Gui, v *gocui.View) error {
 	history := []string{
 		"DOCKING BAY LOG:",
+		"9 months ago   departure   waste products",
+		"9 months ago   arrival     passenger shuttle",
+		"9 months ago   departure   passenger shuttle",
+		"8 months ago   departure   research probe",
+		"8 months ago   arrival     cargo transport",
+		"8 months ago   departure   cargo transport",
+		"8 months ago   arrival     mining equipment",
 		"8 months ago   departure   medical support",
 		"7 months ago   arrival     cargo transport",
 		"6 months ago   departure   waste products",
@@ -326,6 +342,7 @@ func dockingBayHistory(g *gocui.Gui, v *gocui.View) error {
 		"UPCOMING SHIPMENTS:",
 		"in 2 weeks     arrival     drill parts",
 	}
+	v.Autoscroll = true
 	go writeToScreen(g, v, history)
 	return nil
 }
@@ -464,6 +481,7 @@ func exitMain(g *gocui.Gui, v *gocui.View) error {
 			v.Clear()
 			g.Cursor = true
 			v.Highlight = false
+			v.Autoscroll = false
 			for _, view := range ViewsToRemove {
 				g.DeleteView(view)
 			}
