@@ -11,7 +11,21 @@ import (
 
 var LogRoutineRunning = false
 var BlinkRoutineRunning = false
-var MenuItems = []string{"Station Overview", "Docking Bay History", "Floorplan", "Basic Operations", "Critical Operations"}
+var ControlRoutineRunning = false
+var ControlViewActive = false
+var LockControls = false
+var ViewsToRemove = []string{}
+var MenuItems = []string{"Station Overview", "Docking Bay History", "Floorplan", "Base Operations"}
+var Controls = []string{" ", "OFF", "OFF", "OFF", "OFF", "OFF", " ", " ", "CLOSED", "CLOSED", "CLOSED", " ", " ", "DEACTIVATED"}
+var ControlMap = map[string]string{
+	"OFF":         "ON",
+	"ON":          "OFF",
+	"CLOSED":      "OPEN",
+	"OPEN":        "CLOSED",
+	"DEACTIVATED": "INITIATED",
+	"INITIATED":   "INITIATED",
+	" ":           " ",
+}
 
 func main() {
 	g, err := gocui.NewGui(gocui.OutputNormal)
@@ -38,6 +52,12 @@ func main() {
 	if !BlinkRoutineRunning {
 		LogRoutineRunning = true
 		go blinkEffect(g)
+	}
+
+	// start one concurrent thread for the small Logo Box in the upper right corner
+	if !ControlRoutineRunning {
+		ControlRoutineRunning = true
+		go handleControlView(g)
 	}
 
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
@@ -143,7 +163,7 @@ func layout(g *gocui.Gui) error {
 		menuView.SelFgColor = gocui.ColorBlack
 
 		for _, menuItem := range MenuItems {
-			fmt.Fprintf(menuView, "- %s\n", menuItem)
+			fmt.Fprintf(menuView, " > %s\n", menuItem)
 		}
 
 		if _, err := g.SetCurrentView("menu"); err != nil {
@@ -187,13 +207,22 @@ func initKeyBindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("menu", gocui.KeyEnter, gocui.ModNone, selectMenuItem); err != nil {
 		return err
 	}
-	if err := g.SetKeybinding("main", gocui.KeyBackspace2, gocui.ModNone, exitMain); err != nil {
-		return err
-	}
 	if err := g.SetKeybinding("menu", gocui.KeyArrowDown, gocui.ModNone, cursorDown); err != nil {
 		return err
 	}
 	if err := g.SetKeybinding("menu", gocui.KeyArrowUp, gocui.ModNone, cursorUp); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("main", gocui.KeyEnter, gocui.ModNone, selectMenuItem); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("main", gocui.KeyBackspace2, gocui.ModNone, exitMain); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("main", gocui.KeyArrowDown, gocui.ModNone, cursorDown); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding("main", gocui.KeyArrowUp, gocui.ModNone, cursorUp); err != nil {
 		return err
 	}
 	return nil
@@ -203,100 +232,244 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
 }
 
-func selectMenuItem(g *gocui.Gui, v *gocui.View) error {
-	if v == nil || v.Name() == "menu" {
-		_, y := v.Cursor()
-		_, err := g.SetCurrentView("main")
-		updateMainView(g, y)
-		return err
+func selectMenuItem(g *gocui.Gui, activeView *gocui.View) error {
+	if !LockControls {
+		menuView, err := g.View("menu")
+		if err != nil {
+			return err
+		}
+		_, menuY := menuView.Cursor()
+
+		if activeView == nil || activeView.Name() == "menu" {
+			mainView, err := g.View("main")
+			if err != nil {
+				return err
+			}
+
+			switch menuY {
+			case 0:
+				stationOverview(g, mainView)
+			case 1:
+				dockingBayHistory(g, mainView)
+			case 2:
+				floorplan(g, mainView)
+			case 3:
+				baseOperations(g, mainView)
+			default:
+				return nil
+			}
+
+			g.Cursor = false
+			_, err = g.SetCurrentView("main")
+			mainView.SetCursor(0, 0)
+			return err
+		} else if activeView.Name() == "main" && menuY == 3 {
+			_, mainY := activeView.Cursor()
+			if mainY < 14 {
+				toggleControls(mainY)
+			}
+		}
 	}
 	return nil
 }
 
-var MenuItemContent = []string{
-	`
-	STATION NAME: Ypsilon 14
-	STATION TYPE: Asteroid Mining Station
-	MINING MODULE: OrionMiningCorp X7 rev 2.1
-	QUARTERS MODULE: OrionMiningCorp E2 rev 1.1
-	OVERALL STATUS: normal
-
-	CURRENT CREWMEMBERS:
-	- Sonya
-	- Mike
-	- Ashraf
-	- Dana
-	- Jerome
-	- Kantaro
-	- Morgan
-	- Rie
-	- Rosa
-	`,
-	`
-	UPCOMING SHIPMENTS:
-	in 2 weeks     arrival     drill parts
-	
-	DOCKING BAY LOG:
-	3 months ago   departure   technician support
-	2 months ago   arrival     cargo transport
-	2 months ago   departure   cargo transport
-	5 weeks ago    arrival     ********
-	1 hour ago     arrival     supply transport
-	`,
-	`
-
-  Bay 1  Bay 2
-  --+--  --+--    
-    |      |      +---+---+---+---+  +------+
-    |      |      | 7 |   | 8 | 9 |  | Mess |
- +--+------+---+  +---+   +---+---+--+      |
- |             |  | 6 |                     |
- |             +--+---+   +---+---+---------+
- |  Workspace             | 0 | 1 |
- |             +--+---+   +---+---+---------+
- |             |  | 5 |                     |
- +--------+ +--+  +---+   +---+---+--+ Wash |
-          | |     | 4 |   | 3 | 2 |  | room |
-        +-+ +--+  +---+---+---+---+  +------+
-        | Mine |        
-        +------+
-	`,
-	`
-	`,
-	`
-	
-	`,
+func toggleControls(ID int) {
+	Controls[ID] = ControlMap[Controls[ID]]
 }
 
-func updateMainView(g *gocui.Gui, menuItemID int) error {
-	g.Update(func(g *gocui.Gui) error {
-		v, err := g.View("main")
-		if err != nil {
+func writeToScreen(g *gocui.Gui, v *gocui.View, content []string) {
+	LockControls = true
+	for _, line := range content {
+		fmt.Fprintf(v, " ")
+		for _, char := range line {
+			g.Update(func(g *gocui.Gui) error {
+				fmt.Fprintf(v, "%c", char)
+				return nil
+			})
+			randomTimeInterval := rand.Intn(10-1) + 1
+			time.Sleep(time.Duration(randomTimeInterval) * time.Millisecond)
+		}
+		fmt.Fprintf(v, "\n")
+	}
+	LockControls = false
+}
+
+func stationOverview(g *gocui.Gui, v *gocui.View) error {
+	overview := []string{
+		"STATION NAME:     Ypsilon 14",
+		"STATION TYPE:     Asteroid Mining Station",
+		"MINING MODULE:    OrionMiningCorp X7 rev 2.1",
+		"QUARTERS MODULE:  OrionMiningCorp E2 rev 1.1",
+		"OVERALL STATUS:   normal",
+	}
+	go writeToScreen(g, v, overview)
+	return nil
+}
+
+func dockingBayHistory(g *gocui.Gui, v *gocui.View) error {
+	history := []string{
+		"DOCKING BAY LOG:",
+		"8 months ago   departure   medical support",
+		"7 months ago   arrival     cargo transport",
+		"6 months ago   departure   waste products",
+		"6 months ago   arrival     mining equipment",
+		"6 months ago   departure   technician support",
+		"4 months ago   departure   cargo transport",
+		"4 months ago   arrival     passenger shuttle",
+		"3 months ago   departure   passenger shuttle",
+		"3 months ago   departure   technician support",
+		"2 months ago   arrival     cargo transport",
+		"2 months ago   departure   cargo transport",
+		"5 weeks ago    arrival     ********",
+		"1 hour ago     arrival     supply transport",
+		" ",
+		"UPCOMING SHIPMENTS:",
+		"in 2 weeks     arrival     drill parts",
+	}
+	go writeToScreen(g, v, history)
+	return nil
+}
+
+func floorplan(g *gocui.Gui, v *gocui.View) error {
+	plan := []string{
+		" ",
+		" _____     _____",
+		" Bay 1     Bay 2",
+		" --+--     --+--",
+		"   |         |    +---+---+---+---+  +------+",
+		"   |         |    | 7 /   | 8 | 9 |  | Mess |",
+		" +-X---------X-+  +---+   +-/-+-/-+--+      |",
+		" |      ±      |  | 6 /              /      |",
+		" |             +--+---+   +---+---+---------+",
+		" |  Workspace             | 0 | 1 |          ",
+		" |             +--+---+   +-/-+-/-+---------+",
+		" |     ===     |  | 5 /              /      |",
+		" +-------------+  +---+   +-/-+-/-+--+ Wash |",
+		" 	     |v|        | 4 /   | 3 | 2 |  | room |",
+		" 	     |v|        +---+---+---+---+  +------+",
+		" +-------------+",
+		" |  Mineshaft  X . . . ",
+		" +-------------+",
+	}
+	legend := []string{
+		"ROSTER",
+		"1 - Sonya",
+		"2 - Ashraf",
+		"3 - Dana",
+		"4 - Jerome",
+		"5 - Kantaro",
+		"6 - Morgan",
+		"7 - Rie",
+		"8 - Rose",
+		"9 - Mike",
+		"0 - N/A",
+		" ",
+		"LEGEND",
+		"X - Airlock",
+		"/ - Door",
+		"= - Elevator",
+		"± - Terminal",
+	}
+
+	// print floorplan in main view
+	go writeToScreen(g, v, plan)
+
+	// create legend gocui.View to show them on the right
+	maxX, maxY := g.Size()
+	legendView, err := g.SetView("legendView", (maxX/5)*4+2, 4, maxX-2, (maxY/5)*4)
+	if err != nil {
+		if err != gocui.ErrUnknownView {
 			return err
 		}
-		switch menuItemID {
-		case 0:
-			fmt.Fprintln(v, MenuItemContent[menuItemID])
-		case 1:
-			fmt.Fprintln(v, MenuItemContent[menuItemID])
-		case 2:
-			fmt.Fprintln(v, MenuItemContent[menuItemID])
-		case 3:
-			fmt.Fprintln(v, MenuItemContent[menuItemID])
-		case 4:
-			fmt.Fprintln(v, MenuItemContent[menuItemID])
-		}
+	}
 
-		return nil
-	})
+	for _, line := range legend {
+		fmt.Fprintf(legendView, " %s\n", line)
+	}
+	//go writeToScreen(g, legendView, legend)
+
+	// add crewView to list of views to remove when exiting the mainView
+	ViewsToRemove = append(ViewsToRemove, "legendView")
+
+	return nil
+}
+
+func baseOperations(g *gocui.Gui, v *gocui.View) error {
+	operations := []string{
+		"SHOWER CONTROL",
+		"> Shower 1",
+		"> Shower 2",
+		"> Shower 3",
+		"> Shower 4",
+		"> Shower 5",
+		" ",
+		"AIRLOCK CONTROL",
+		"> Airlock 1",
+		"> Airlock 2",
+		"> Airlock 3",
+		" ",
+		"CRITICAL OPERATIONS",
+		"> Initiate Self Destruction",
+	}
+
+	v.Highlight = true
+	v.SelBgColor = gocui.ColorYellow
+	v.SelFgColor = gocui.ColorBlack
+
+	go writeToScreen(g, v, operations)
+
+	ControlViewActive = true
+
+	// create legend gocui.View to show them on the right
+	maxX, maxY := g.Size()
+	_, err := g.SetView("control", (maxX/3)*2+2, 4, maxX-2, (maxY/5)*4)
+	if err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+	}
+
+	ViewsToRemove = append(ViewsToRemove, "control")
+
+	return nil
+}
+
+func handleControlView(g *gocui.Gui) error {
+	for {
+		if ControlViewActive {
+			g.Update(func(g *gocui.Gui) error {
+				controlView, err := g.View("control")
+				if err != nil {
+					return err
+				}
+				controlView.Clear()
+				for _, line := range Controls {
+					fmt.Fprintf(controlView, " %s\n", line)
+				}
+
+				return nil
+			})
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
 	return nil
 }
 
 func exitMain(g *gocui.Gui, v *gocui.View) error {
-	if v.Name() == "main" {
-		v.Clear()
-		_, err := g.SetCurrentView("menu")
-		return err
+	if !LockControls {
+		if ControlViewActive {
+			ControlViewActive = false
+		}
+		if v.Name() == "main" {
+			v.Clear()
+			g.Cursor = true
+			v.Highlight = false
+			for _, view := range ViewsToRemove {
+				g.DeleteView(view)
+			}
+			_, err := g.SetCurrentView("menu")
+			return err
+		}
 	}
 	return nil
 }
