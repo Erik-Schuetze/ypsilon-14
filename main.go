@@ -28,14 +28,6 @@ var ControlMap = map[string]string{
 	" ":           " ",
 }
 
-/*
-TODO
-
-PIN for self destruction / ID CARD
-
-think about additional Info / Flavor / Controls / Menu Options
-*/
-
 func main() {
 	g, err := gocui.NewGui(gocui.OutputNormal)
 	if err != nil {
