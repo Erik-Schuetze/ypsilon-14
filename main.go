@@ -14,9 +14,10 @@ var BlinkRoutineRunning = false
 var ControlRoutineRunning = false
 var ControlViewActive = false
 var LockControls = false
+var adminAccess = false
 var ViewsToRemove = []string{}
-var MenuItems = []string{"Station Overview", "Docking Bay History", "Floorplan", "Base Operations"}
-var Controls = []string{" ", "OFF", "OFF", "OFF", "OFF", "OFF", " ", " ", "CLOSED", "CLOSED", "CLOSED", " ", " ", "DEACTIVATED"}
+var MenuItems = []string{"Station Overview", "Docking Bay", "Floorplan", "Base Operations", "Scan Admin ID Card"}
+var Controls = []string{" ", "OFF", "OFF", "OFF", "OFF", "OFF", " ", " ", "CLOSED", "CLOSED", "CLOSED", " ", " ", "OPEN", " ", " ", "DEACTIVATED", " "}
 var ControlMap = map[string]string{
 	"OFF":         "ON",
 	"ON":          "OFF",
@@ -124,6 +125,7 @@ func writeLogLines(g *gocui.Gui) error {
 		"INFO:    Routine maintenance of mining equipment completed. All systems operational.",
 		"INFO:    Atmospheric pressure levels in all sectors normalized within standard tolerances.",
 		"INFO:    Primary power systems operating stable.",
+		"INFO:    Bleep Bloop",
 		"INFO:    Gravity generators operating at 1.0G. No deviations reported in the last 24 hours.",
 		"INFO:    Temperature and Humidity levels remain within standard limits.",
 		"INFO:    Running check on backup systems for routine diagnostics.",
@@ -227,6 +229,9 @@ func initKeyBindings(g *gocui.Gui) error {
 	if err := g.SetKeybinding("main", gocui.KeyBackspace2, gocui.ModNone, exitMain); err != nil {
 		return err
 	}
+	if err := g.SetKeybinding("message", gocui.KeyBackspace2, gocui.ModNone, exitMain); err != nil {
+		return err
+	}
 	if err := g.SetKeybinding("main", gocui.KeyArrowDown, gocui.ModNone, cursorDown); err != nil {
 		return err
 	}
@@ -255,14 +260,17 @@ func selectMenuItem(g *gocui.Gui, activeView *gocui.View) error {
 			}
 
 			switch menuY {
-			case 0:
+			case 0: // Station Overview
 				stationOverview(g, mainView)
-			case 1:
+			case 1: // Docking Bay History
 				dockingBayHistory(g, mainView)
-			case 2:
+			case 2: // Floorplan
 				floorplan(g, mainView)
-			case 3:
+			case 3: // Base Operations
 				baseOperations(g, mainView)
+			case 4: // Scan ID Card
+				adminAccess = true
+				displayMessage(g, "CARD READER v1.2", "Enabled admin access")
 			default:
 				return nil
 			}
@@ -274,11 +282,37 @@ func selectMenuItem(g *gocui.Gui, activeView *gocui.View) error {
 			return err
 		} else if activeView.Name() == "main" && menuY == 3 {
 			_, mainY := activeView.Cursor()
-			if mainY < 14 {
+			if mainY < 16 {
 				toggleControls(mainY)
+			} else if mainY == 16 {
+				if adminAccess {
+					toggleControls(mainY)
+					displayMessage(g, "SELF DESTRUCTION", "Initiated Self Destruction. Evacuate immediately!")
+				} else {
+					displayMessage(g, "ERROR", "Admin access required!")
+				}
 			}
 		}
 	}
+	return nil
+}
+
+func displayMessage(g *gocui.Gui, title string, message string) error {
+	maxX, maxY := g.Size()
+	width := len(message) + 2
+	messageView, err := g.SetView("message", maxX/2-width/2, maxY/2-1, maxX/2+width/2+1, maxY/2+1)
+	if err != nil {
+		if err != gocui.ErrUnknownView {
+			return err
+		}
+	}
+	g.SetViewOnTop("message")
+	g.SetCurrentView("message")
+	messageView.Title = fmt.Sprintf(" %s ", title)
+	fmt.Fprintf(messageView, " %s", message)
+
+	ViewsToRemove = append(ViewsToRemove, "message")
+
 	return nil
 }
 
@@ -305,11 +339,17 @@ func writeToScreen(g *gocui.Gui, v *gocui.View, content []string) {
 
 func stationOverview(g *gocui.Gui, v *gocui.View) error {
 	overview := []string{
-		"STATION NAME:     Ypsilon 14",
-		"STATION TYPE:     Asteroid Mining Station",
-		"MINING MODULE:    OrionMiningCorp X7 rev 2.1",
-		"QUARTERS MODULE:  OrionMiningCorp E2 rev 1.1",
-		"OVERALL STATUS:   normal",
+		"STATION NAME:       Ypsilon 14",
+		"STATION TYPE:       Asteroid Mining Station",
+		" ",
+		"MINING MODULE:      OrionMiningCorp X7 rev 2.1",
+		"QUARTERS MODULE:    OrionMiningCorp E2 rev 1.1",
+		" ",
+		"OVERALL STATUS:     normal",
+		"COMPLIANCE STATUS:  compliant",
+		" ",
+		"UPDATES:            14 Updates available",
+		"                    unvoluntary reboot scheduled",
 	}
 	go writeToScreen(g, v, overview)
 	return nil
@@ -318,6 +358,9 @@ func stationOverview(g *gocui.Gui, v *gocui.View) error {
 func dockingBayHistory(g *gocui.Gui, v *gocui.View) error {
 	history := []string{
 		"DOCKING BAY LOG:",
+		"10 months ago  arrival     cargo transport",
+		"10 months ago  departure   cargo transport",
+		"9 months ago   arrival     research probe",
 		"9 months ago   departure   waste products",
 		"9 months ago   arrival     passenger shuttle",
 		"9 months ago   departure   passenger shuttle",
@@ -341,6 +384,10 @@ func dockingBayHistory(g *gocui.Gui, v *gocui.View) error {
 		" ",
 		"UPCOMING SHIPMENTS:",
 		"in 2 weeks     arrival     drill parts",
+		" ",
+		"CURRENT BAY STATUS:",
+		"BAY 1:         ********",
+		"BAY 2:         Tempest",
 	}
 	v.Autoscroll = true
 	go writeToScreen(g, v, history)
@@ -360,32 +407,32 @@ func floorplan(g *gocui.Gui, v *gocui.View) error {
 		" |             +--+---+   +---+---+---------+",
 		" |  Workspace             | 0 | 1 |          ",
 		" |             +--+---+   +-/-+-/-+---------+",
-		" |     ===     |  | 5 /              /      |",
+		" |     [ ]     |  | 5 /              /      |",
 		" +-------------+  +---+   +-/-+-/-+--+ Wash |",
-		" 	     |v|        | 4 /   | 3 | 2 |  | room |",
-		" 	     |v|        +---+---+---+---+  +------+",
+		"       |v|        | 4 /   | 3 | 2 |  | room |",
+		"       |v|        +---+---+---+---+  +------+",
 		" +-------------+",
 		" |  Mineshaft  X . . . ",
 		" +-------------+",
 	}
 	legend := []string{
 		"ROSTER",
-		"1 - Sonya",
-		"2 - Ashraf",
-		"3 - Dana",
-		"4 - Jerome",
-		"5 - Kantaro",
-		"6 - Morgan",
-		"7 - Rie",
-		"8 - Rose",
-		"9 - Mike",
-		"0 - N/A",
+		" 1  Sonya",
+		" 2  Ashraf",
+		" 3  Dana",
+		" 4  Jerome",
+		" 5  Kantaro",
+		" 6  Morgan",
+		" 7  Rie",
+		" 8  Rose",
+		" 9  Mike",
+		" 0  N/A",
 		" ",
 		"LEGEND",
-		"X - Airlock",
-		"/ - Door",
-		"= - Elevator",
-		"± - Terminal",
+		" X  Airlock",
+		" /  Door",
+		"[ ] Elevator",
+		" ±  Terminal",
 	}
 
 	// print floorplan in main view
@@ -413,7 +460,7 @@ func floorplan(g *gocui.Gui, v *gocui.View) error {
 
 func baseOperations(g *gocui.Gui, v *gocui.View) error {
 	operations := []string{
-		"SHOWER CONTROL",
+		"SHOWER OVERRIDE",
 		"> Shower 1",
 		"> Shower 2",
 		"> Shower 3",
@@ -421,9 +468,12 @@ func baseOperations(g *gocui.Gui, v *gocui.View) error {
 		"> Shower 5",
 		" ",
 		"AIRLOCK CONTROL",
-		"> Airlock 1",
-		"> Airlock 2",
-		"> Airlock 3",
+		"> Airlock 1 (Bay 1)",
+		"> Airlock 2 (Bay 2)",
+		"> Airlock 3 (Mineshaft)",
+		" ",
+		"AIR VENT CONTROL",
+		"> Central Air Circulation System",
 		" ",
 		"CRITICAL OPERATIONS",
 		"> Initiate Self Destruction",
@@ -477,15 +527,17 @@ func exitMain(g *gocui.Gui, v *gocui.View) error {
 		if ControlViewActive {
 			ControlViewActive = false
 		}
-		if v.Name() == "main" {
+		if v.Name() == "main" || v.Name() == "message" {
+			v, err := g.View("main")
 			v.Clear()
 			g.Cursor = true
 			v.Highlight = false
 			v.Autoscroll = false
+			v.Editable = false
 			for _, view := range ViewsToRemove {
 				g.DeleteView(view)
 			}
-			_, err := g.SetCurrentView("menu")
+			_, err = g.SetCurrentView("menu")
 			return err
 		}
 	}
