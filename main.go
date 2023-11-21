@@ -17,10 +17,11 @@ var LockControls = false
 var adminAccess = false
 var ViewsToRemove = []string{}
 var MenuItems = []string{"Station Overview", "Docking Bay", "Floorplan", "Base Operations", "Scan Admin ID Card"}
-var Controls = []string{" ", "OFF", "OFF", "OFF", "OFF", "OFF", " ", " ", "CLOSED", "CLOSED", "CLOSED", " ", " ", "OPEN", " ", " ", "DEACTIVATED", " "}
+var Controls = []string{" ", "OFF", "OFF", "OFF", "N/A", "OFF", " ", " ", "CLOSED", "CLOSED", "CLOSED", " ", " ", "OPEN", " ", " ", "DEACTIVATED", " "}
 var ControlMap = map[string]string{
 	"OFF":         "ON",
 	"ON":          "OFF",
+	"N/A":         "N/A",
 	"CLOSED":      "OPEN",
 	"OPEN":        "CLOSED",
 	"DEACTIVATED": "INITIATED",
