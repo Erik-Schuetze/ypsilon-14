@@ -1,4 +1,4 @@
-module mothership/ypsilon-14
+module erik-schuetze/ypsilon-14
 
 go 1.21.0
 
