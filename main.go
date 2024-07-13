@@ -39,12 +39,6 @@ func main() {
 		go ui.StartLogoAnimation(g)
 	}
 
-	// start one concurrent thread for handling the controls in the base operation menu
-	if !ControlRoutineRunning {
-		ControlRoutineRunning = true
-		//go ui.HandleOperationView(g)
-	}
-
 	if err := g.MainLoop(); err != nil && err != gocui.ErrQuit {
 		log.Panicln(err)
 	}
