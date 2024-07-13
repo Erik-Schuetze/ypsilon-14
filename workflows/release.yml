@@ -1,0 +1,95 @@
+name: Build and Release
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    - name: Set up Go
+      uses: actions/setup-go@v3
+      with:
+        go-version: 1.18
+
+    - name: Build binaries
+      run: make build-all
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ github.sha }}
+        release_name: Release ${{ github.sha }}
+        draft: false
+        prerelease: false
+
+    - name: Generate Release Notes
+      id: generate_notes
+      run: |
+        notes=$(git log --format=%B -n 1 ${{ github.sha }})
+        echo "::set-output name=notes::$notes"
+
+    - name: Update Release Notes
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const { owner, repo } = context.repo;
+          const release_id = ${{
+            steps.create_release.outputs.id
+          }};
+          const body = `${{ steps.generate_notes.outputs.notes }}`;
+          await github.rest.repos.updateRelease({
+            owner,
+            repo,
+            release_id,
+            body,
+          });
+
+    - name: Upload macOS Intel binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./bin/myapp-macos-intel
+        asset_name: myapp-macos-intel
+        asset_content_type: application/octet-stream
+
+    - name: Upload macOS ARM binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./bin/myapp-macos-arm
+        asset_name: myapp-macos-arm
+        asset_content_type: application/octet-stream
+
+    - name: Upload Linux binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./bin/myapp-linux
+        asset_name: myapp-linux
+        asset_content_type: application/octet-stream
+
+    - name: Upload Windows binary
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./bin/myapp.exe
+        asset_name: myapp.exe
+        asset_content_type: application/octet-stream
