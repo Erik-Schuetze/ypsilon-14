@@ -50,7 +50,7 @@ func TestWrappedLineCount(t *testing.T) {
 		want  int
 	}{
 		{"", 10, 1},
-		{"abc", 3, 1},
+		{"abc", 3, 2},
 		{"abcd", 3, 2},
 		{"a\nb", 5, 2},
 		{"abc", 0, 1},
@@ -73,6 +73,7 @@ func TestMessageRect(t *testing.T) {
 		{100, 29, "ERROR", "Admin access required!"},
 		{100, 29, "LONG", strings.Repeat("x", 200)},
 		{100, 29, strings.Repeat("T", 200), "ok"},
+		{100, 29, strings.Repeat("T", 60), "ok"},
 		{160, 45, "CARD READER v1.2", "Enabled admin access"},
 	}
 
@@ -89,6 +90,10 @@ func TestMessageRect(t *testing.T) {
 		}
 		if need := wrappedLineCount(" "+c.msg, innerW); need > r.InnerH() {
 			t.Errorf("%dx%d %q: message needs %d rows, has %d", c.w, c.h, c.title, need, r.InnerH())
+		}
+		// drawTitle renders at most innerW-2 runes of " "+title+" ".
+		if need := runeLen(" "+c.title+" ") + 2; need <= c.w-6 && innerW < need {
+			t.Errorf("%dx%d %q: title needs %d inner columns, has %d", c.w, c.h, c.title, need, innerW)
 		}
 		if diff := abs((r.X0+r.X1)/2 - c.w/2); diff > 1 {
 			t.Errorf("%dx%d %q: horizontal center off by %d", c.w, c.h, c.title, diff)

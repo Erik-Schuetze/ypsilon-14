@@ -203,8 +203,10 @@ func TestComputeLayoutMonotonicWidth(t *testing.T) {
 				{"main height", prev.Main.InnerH(), cur.Main.InnerH()},
 				{"legend width", prev.Legend.InnerW(), cur.Legend.InnerW()},
 				{"legend height", prev.Legend.InnerH(), cur.Legend.InnerH()},
+				{"legend visible width", prev.Legend.X0 - (prev.Main.X0 + 1), cur.Legend.X0 - (cur.Main.X0 + 1)},
 				{"operation width", prev.Operation.InnerW(), cur.Operation.InnerW()},
 				{"operation height", prev.Operation.InnerH(), cur.Operation.InnerH()},
+				{"operation visible width", prev.Operation.X0 - (prev.Main.X0 + 1), cur.Operation.X0 - (cur.Main.X0 + 1)},
 			}
 			for _, check := range checks {
 				if check.cur < check.prev {
