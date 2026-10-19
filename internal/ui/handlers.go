@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"log"
 	"time"
 
 	"math/rand"
@@ -45,11 +44,13 @@ func ToggleControls(ID int) {
 
 func HandleOperationView(g *gocui.Gui) error {
 	for {
+		if !SubViews.Get("operationView") {
+			return nil
+		}
 		g.Update(func(g *gocui.Gui) error {
 			operationView, err := g.View("operationView")
 			if err != nil {
-				log.Fatal("Error in HandleOperationView")
-				return err
+				return nil
 			}
 			operationView.Clear()
 			for _, line := range Controls {

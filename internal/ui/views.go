@@ -10,6 +10,20 @@ var ViewsToRemove = []string{}
 var ControlViewActive = false
 var AdminAccess = false
 
+var (
+	popupTitle   string
+	popupMessage string
+)
+
+func addViewToRemove(name string) {
+	for _, existing := range ViewsToRemove {
+		if existing == name {
+			return
+		}
+	}
+	ViewsToRemove = append(ViewsToRemove, name)
+}
+
 func InitStationOverview(g *gocui.Gui, v *gocui.View) error {
 	overview := []string{
 		"STATION NAME:       Ypsilon 14",
@@ -96,7 +110,7 @@ func InitFloorplan(g *gocui.Gui, v *gocui.View) error {
 	SubViews.Write("legendView", true)
 
 	// add legend to list of views to remove when exiting the mainView
-	ViewsToRemove = append(ViewsToRemove, "legendView")
+	addViewToRemove("legendView")
 
 	return nil
 }
@@ -134,26 +148,52 @@ func InitBaseOperations(g *gocui.Gui, v *gocui.View) error {
 	SubViews.Write("operationView", true)
 	go HandleOperationView(g)
 
-	ViewsToRemove = append(ViewsToRemove, "operationView")
+	addViewToRemove("operationView")
 
 	return nil
 }
 
 func DisplayMessage(g *gocui.Gui, title string, message string) error {
-	maxX, maxY := g.Size()
-	width := len(message) + 2
-	messageView, err := g.SetView("message", maxX/2-width/2, maxY/2-1, maxX/2+width/2+1, maxY/2+1)
-	if err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-	}
-	g.SetViewOnTop("message")
-	g.SetCurrentView("message")
-	messageView.Title = fmt.Sprintf(" %s ", title)
-	fmt.Fprintf(messageView, " %s", message)
-
-	ViewsToRemove = append(ViewsToRemove, "message")
-
+	popupTitle, popupMessage = title, message
+	layoutMessage(g, true)
 	return nil
+}
+
+// layoutMessage positions the popup. When rewrite is false it only updates
+// geometry (used when the terminal is resized while the popup is open).
+func layoutMessage(g *gocui.Gui, rewrite bool) {
+	w, h := g.Size()
+	if w < 4 || h < 4 {
+		return
+	}
+
+	r, _ := messageRect(w, h, popupTitle, popupMessage)
+	messageView, err := g.SetView("message", r.X0, r.Y0, r.X1, r.Y1)
+	if err != nil && err != gocui.ErrUnknownView {
+		return
+	}
+
+	messageView.Wrap = true
+	messageView.Title = fmt.Sprintf(" %s ", popupTitle)
+	if rewrite || err == gocui.ErrUnknownView {
+		messageView.Clear()
+		fmt.Fprintf(messageView, " %s", popupMessage)
+	}
+
+	_, _ = g.SetViewOnTop("message")
+	addViewToRemove("message")
+	if rewrite {
+		_, _ = g.SetCurrentView("message")
+	}
+}
+
+// recenterMessage keeps an open popup centered after a resize.
+func recenterMessage(g *gocui.Gui) {
+	if popupMessage == "" {
+		return
+	}
+	if _, err := g.View("message"); err != nil {
+		return
+	}
+	layoutMessage(g, false)
 }
