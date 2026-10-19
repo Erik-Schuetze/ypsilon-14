@@ -7,6 +7,11 @@ import (
 	"github.com/jroimartin/gocui"
 )
 
+const (
+	titleText = " Ypsilon 14 | Company Property: Unauthorized access, modification, or use is strictly prohibited."
+	keyText   = " ENTER=Select    BACKSPACE=Exit"
+)
+
 var initialValues = map[string]bool{
 	"legendView":    false,
 	"operationView": false,
@@ -15,25 +20,39 @@ var SubViews = util.NewMutexMap(initialValues)
 
 var MenuItems = []string{"Station Overview", "Docking Bay", "Floorplan", "Base Operations", "Scan Admin ID Card"}
 
+// -1 = not rendered yet, 0 = one line, 1 = wrapped over two lines.
+var (
+	titleRenderedMode = -1
+	keyRenderedMode   = -1
+)
+
 func InitLayout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
-	if titleView, err := g.SetView("title", 2, 1, maxX-7, 3); err != nil {
-		titleView.Title = " MINING STATION TERMINAL v8.5.2 "
-		if err != gocui.ErrUnknownView {
-			return err
-		}
-		fmt.Fprintln(titleView, " Ypsilon 14 | Company Property: Unauthorized access, modification, or use is strictly prohibited.")
+
+	lay, ok := ComputeLayout(maxX, maxY)
+	if !ok {
+		enterSizeWarning(g)
+		renderSizeWarning(g, maxX, maxY)
+		return nil
 	}
-	if blinkView, err := g.SetView("blink", maxX-6, 1, maxX-2, 3); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
+
+	restoreFocus := ""
+	wasWarning := sizeWarningActive
+	if wasWarning {
+		restoreFocus = leaveSizeWarning(g)
+	}
+
+	if titleView, isNew := setView(g, "title", lay.Title); titleView != nil {
+		if isNew {
+			titleView.Title = " MINING STATION TERMINAL v8.5.2 "
+			titleRenderedMode = -1
 		}
+		renderTitle(titleView, lay.TitleH == 3)
+	}
+	if blinkView, isNew := setView(g, "blink", lay.Blink); blinkView != nil && isNew {
 		fmt.Fprintln(blinkView, "")
 	}
-	if menuView, err := g.SetView("menu", 2, 4, maxX/3, (maxY/5)*4-3); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
-		}
+	if menuView, isNew := setView(g, "menu", lay.Menu); menuView != nil && isNew {
 		menuView.Title = " MENU "
 		menuView.Highlight = true
 		menuView.SelBgColor = gocui.ColorYellow
@@ -42,42 +61,26 @@ func InitLayout(g *gocui.Gui) error {
 		for _, menuItem := range MenuItems {
 			fmt.Fprintf(menuView, " > %s\n", menuItem)
 		}
-
-		if _, err := g.SetCurrentView("menu"); err != nil {
-			return err
-		}
-
 	}
-	if keyView, err := g.SetView("key", 2, (maxY/5)*4-2, maxX/3, (maxY/5)*4); err != nil {
-		if err != gocui.ErrUnknownView {
-			return err
+	if keyView, isNew := setView(g, "key", lay.Key); keyView != nil {
+		if isNew {
+			keyView.Title = " NAVIGATION "
+			keyRenderedMode = -1
 		}
-		keyView.Title = " NAVIGATION "
-		fmt.Fprintln(keyView, " ENTER=Select    BACKSPACE=Exit")
-
-		if _, err := g.SetCurrentView("menu"); err != nil {
-			return err
-		}
-
+		renderKey(keyView, lay.KeyH == 3)
 	}
-	if logView, err := g.SetView("log", 2, (maxY/5)*4+1, maxX-2, maxY-1); err != nil {
+	if logView, isNew := setView(g, "log", lay.Log); logView != nil && isNew {
 		logView.Title = " SYSTEM MESSAGES "
 		logView.Autoscroll = true
 		logView.Wrap = true
-		if err != gocui.ErrUnknownView {
-			return err
-		}
 	}
-	if mainView, err := g.SetView("main", maxX/3+2, 4, maxX-2, (maxY/5)*4); err != nil {
+	if mainView, isNew := setView(g, "main", lay.Main); mainView != nil && isNew {
 		mainView.Highlight = false
-		if err != gocui.ErrUnknownView {
-			return err
-		}
 	}
 
 	// SubViews that show up in certain cases
 	if SubViews.Get("legendView") {
-		if legendView, err := g.SetView("legendView", (maxX/5)*4+2, 4, maxX-2, (maxY/5)*4); err != nil {
+		if legendView, isNew := setView(g, "legendView", lay.Legend); legendView != nil && isNew {
 			var legend = []string{
 				"ROSTER",
 				" 1  Sonya",
@@ -101,20 +104,81 @@ func InitLayout(g *gocui.Gui) error {
 			for _, line := range legend {
 				fmt.Fprintf(legendView, " %s\n", line)
 			}
-			if err != gocui.ErrUnknownView {
-				return err
-			}
-
 		}
 	}
 
 	if SubViews.Get("operationView") {
-		if _, err := g.SetView("operationView", (maxX/3)*2+2, 4, maxX-2, (maxY/5)*4); err != nil {
-			if err != gocui.ErrUnknownView {
-				return err
-			}
-		}
+		_, _ = setView(g, "operationView", lay.Operation)
+	}
 
+	recenterMessage(g)
+
+	if wasWarning {
+		target := restoreFocus
+		if target == "" || target == sizeWarningViewName {
+			target = "menu"
+		}
+		if _, err := g.SetCurrentView(target); err != nil {
+			_, _ = g.SetCurrentView("menu")
+		}
+	} else if g.CurrentView() == nil {
+		_, _ = g.SetCurrentView("menu")
 	}
 	return nil
+}
+
+// setView updates or creates a view and reports whether it was newly created.
+// Unexpected errors (including invalid dimensions) are ignored defensively;
+// ComputeLayout already guarantees valid rectangles.
+func setView(g *gocui.Gui, name string, r Rect) (*gocui.View, bool) {
+	v, err := g.SetView(name, r.X0, r.Y0, r.X1, r.Y1)
+	switch err {
+	case nil:
+		return v, false
+	case gocui.ErrUnknownView:
+		return v, true
+	default:
+		return nil, false
+	}
+}
+
+func renderTitle(v *gocui.View, wrapped bool) {
+	mode := 0
+	if wrapped {
+		mode = 1
+	}
+	if titleRenderedMode == mode {
+		return
+	}
+	titleRenderedMode = mode
+
+	v.Clear()
+	if !wrapped {
+		fmt.Fprintln(v, titleText)
+		return
+	}
+
+	width, _ := v.Size()
+	for _, line := range wrapWords(titleText, width) {
+		fmt.Fprintln(v, line)
+	}
+}
+
+func renderKey(v *gocui.View, wrapped bool) {
+	mode := 0
+	if wrapped {
+		mode = 1
+	}
+	if keyRenderedMode == mode {
+		return
+	}
+	keyRenderedMode = mode
+
+	v.Clear()
+	if !wrapped {
+		fmt.Fprintln(v, keyText)
+		return
+	}
+	fmt.Fprintln(v, " ENTER=Select")
+	fmt.Fprintln(v, " BACKSPACE=Exit")
 }

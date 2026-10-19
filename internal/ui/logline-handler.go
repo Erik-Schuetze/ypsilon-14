@@ -38,7 +38,9 @@ func StartLoglineAnimation(g *gocui.Gui) error {
 			g.Update(func(g *gocui.Gui) error {
 				logView, err := g.View("log")
 				if err != nil {
-					return err
+					// The view does not exist while the terminal is below the
+					// supported minimum (e.g. at startup). Keep the goroutine alive.
+					return nil
 				}
 				fmt.Fprintf(logView, "\n %s", entry)
 				return nil

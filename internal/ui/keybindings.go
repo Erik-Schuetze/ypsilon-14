@@ -47,14 +47,14 @@ func selectMenuItem(g *gocui.Gui, activeView *gocui.View) error {
 	if !LockControls {
 		menuView, err := g.View("menu")
 		if err != nil {
-			return err
+			return nil
 		}
 		_, menuY := menuView.Cursor()
 
 		if activeView == nil || activeView.Name() == "menu" {
 			mainView, err := g.View("main")
 			if err != nil {
-				return err
+				return nil
 			}
 
 			switch menuY {
@@ -101,7 +101,10 @@ func exitMain(g *gocui.Gui, v *gocui.View) error {
 			ControlViewActive = false
 		}
 		if v.Name() == "main" || v.Name() == "message" {
-			v, _ := g.View("main")
+			v, err := g.View("main")
+			if err != nil {
+				return nil
+			}
 			v.Clear()
 			g.Cursor = true
 			v.Highlight = false
@@ -111,8 +114,8 @@ func exitMain(g *gocui.Gui, v *gocui.View) error {
 				g.DeleteView(view)
 				SubViews.Write(view, false)
 			}
-			_, err := g.SetCurrentView("menu")
-			return err
+			_, _ = g.SetCurrentView("menu")
+			return nil
 		}
 	}
 	return nil

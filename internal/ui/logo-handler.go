@@ -14,7 +14,9 @@ func StartLogoAnimation(g *gocui.Gui) error {
 		g.Update(func(g *gocui.Gui) error {
 			blinkView, err := g.View("blink")
 			if err != nil {
-				return err
+				// The view does not exist while the terminal is below the
+				// supported minimum (e.g. at startup). Keep the goroutine alive.
+				return nil
 			}
 			blinkView.Clear()
 			fmt.Fprintf(blinkView, "%s", blinkString)
