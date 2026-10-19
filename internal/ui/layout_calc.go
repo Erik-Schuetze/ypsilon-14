@@ -10,8 +10,6 @@ const (
 	MinTerminalWidth  = 100
 	MinTerminalHeight = 29
 
-	TitleTextWidth      = 97 // runes, includes leading space
-	KeyTextWidth        = 31
 	MenuTextWidth       = 21
 	LegendTextWidth     = 13
 	OperationTextWidth  = 12
@@ -21,6 +19,12 @@ const (
 	LegendHeight        = 17
 	OperationHeight     = 18
 	OperationsListWidth = 33 // longest operations line incl. leading space
+)
+
+// Derived from the user-visible strings in layout.go so they cannot desync.
+var (
+	TitleTextWidth = runeLen(titleText) // includes leading space
+	KeyTextWidth   = runeLen(keyText)
 )
 
 // Rect is a gocui view rectangle. InnerW/InnerH match gocui's View.Size().
@@ -66,15 +70,27 @@ func ComputeLayout(width, height int) (Layout, bool) {
 		keyH = 3
 	}
 
+	mainX0 := width/3 + 2
+
+	// Split the space right of the main view between the visible main content
+	// and an overlay. Both sides then grow monotonically with the terminal.
+	overlayX0 := func(minVisible int) int {
+		visible := (width - mainX0) / 2
+		if visible < minVisible {
+			visible = minVisible
+		}
+		return mainX0 + 1 + visible
+	}
+
 	l := Layout{
 		Title:      Rect{2, 1, width - 7, 1 + titleH},
 		Blink:      Rect{width - 6, 1, width - 2, 3},
 		Menu:       Rect{2, contentTop, width / 3, splitY - keyH - 1},
 		Key:        Rect{2, splitY - keyH, width / 3, splitY},
 		Log:        Rect{2, splitY + 1, width - 2, height - 1},
-		Main:       Rect{width/3 + 2, contentTop, width - 2, splitY},
-		Legend:     Rect{width - width/5 + 2, contentTop, width - 2, splitY},
-		Operation:  Rect{width - width/3 + 2, contentTop, width - 2, splitY},
+		Main:       Rect{mainX0, contentTop, width - 2, splitY},
+		Legend:     Rect{overlayX0(FloorplanWidth), contentTop, width - 2, splitY},
+		Operation:  Rect{overlayX0(OperationsListWidth), contentTop, width - 2, splitY},
 		ContentTop: contentTop,
 		TitleH:     titleH,
 		KeyH:       keyH,
@@ -127,10 +143,12 @@ func wrappedLineCount(text string, innerW int) int {
 	total := 0
 	for _, line := range strings.Split(text, "\n") {
 		n := runeLen(line)
-		if n <= innerW {
+		if n < innerW {
 			total++
 		} else {
-			total += (n + innerW - 1) / innerW
+			// gocui's loop (n <= len) emits a trailing empty line when the
+			// line length is an exact multiple of the inner width.
+			total += n/innerW + 1
 		}
 	}
 	if total == 0 {
@@ -152,8 +170,10 @@ func messageRect(screenW, screenH int, title, message string) (Rect, int) {
 		maxInnerW = 1
 	}
 
+	// gocui's drawTitle only renders innerW-2 runes, and the title is
+	// rendered as " "+title+" ", so the title needs N+4 inner columns.
 	wantW := runeLen(body)
-	if titleW := runeLen(" "+title+" ") + 1; titleW > wantW {
+	if titleW := runeLen(" "+title+" ") + 2; titleW > wantW {
 		wantW = titleW
 	}
 	innerW := wantW

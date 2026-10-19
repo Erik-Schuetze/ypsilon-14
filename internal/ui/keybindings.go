@@ -113,6 +113,9 @@ func exitMain(g *gocui.Gui, v *gocui.View) error {
 			for _, view := range ViewsToRemove {
 				g.DeleteView(view)
 				SubViews.Write(view, false)
+				if view == "message" {
+					popupTitle, popupMessage = "", ""
+				}
 			}
 			_, _ = g.SetCurrentView("menu")
 			return nil

@@ -3,6 +3,7 @@ package ui
 import (
 	"erik-schuetze/ypsilon-14/pkg/util"
 	"fmt"
+	"log"
 
 	"github.com/jroimartin/gocui"
 )
@@ -22,8 +23,9 @@ var MenuItems = []string{"Station Overview", "Docking Bay", "Floorplan", "Base O
 
 // -1 = not rendered yet, 0 = one line, 1 = wrapped over two lines.
 var (
-	titleRenderedMode = -1
-	keyRenderedMode   = -1
+	titleRenderedMode  = -1
+	titleRenderedWidth = -1
+	keyRenderedMode    = -1
 )
 
 func InitLayout(g *gocui.Gui) error {
@@ -128,8 +130,8 @@ func InitLayout(g *gocui.Gui) error {
 }
 
 // setView updates or creates a view and reports whether it was newly created.
-// Unexpected errors (including invalid dimensions) are ignored defensively;
-// ComputeLayout already guarantees valid rectangles.
+// ComputeLayout guarantees valid rectangles; anything other than ErrUnknownView
+// is logged rather than silently leaving a view missing.
 func setView(g *gocui.Gui, name string, r Rect) (*gocui.View, bool) {
 	v, err := g.SetView(name, r.X0, r.Y0, r.X1, r.Y1)
 	switch err {
@@ -138,19 +140,23 @@ func setView(g *gocui.Gui, name string, r Rect) (*gocui.View, bool) {
 	case gocui.ErrUnknownView:
 		return v, true
 	default:
+		log.Printf("ui: SetView(%q): %v", name, err)
 		return nil, false
 	}
 }
 
 func renderTitle(v *gocui.View, wrapped bool) {
 	mode := 0
+	width := -1
 	if wrapped {
 		mode = 1
+		width, _ = v.Size()
 	}
-	if titleRenderedMode == mode {
+	if titleRenderedMode == mode && titleRenderedWidth == width {
 		return
 	}
 	titleRenderedMode = mode
+	titleRenderedWidth = width
 
 	v.Clear()
 	if !wrapped {
@@ -158,7 +164,6 @@ func renderTitle(v *gocui.View, wrapped bool) {
 		return
 	}
 
-	width, _ := v.Size()
 	for _, line := range wrapWords(titleText, width) {
 		fmt.Fprintln(v, line)
 	}

@@ -189,9 +189,6 @@ func layoutMessage(g *gocui.Gui, rewrite bool) {
 
 // recenterMessage keeps an open popup centered after a resize.
 func recenterMessage(g *gocui.Gui) {
-	if popupMessage == "" {
-		return
-	}
 	if _, err := g.View("message"); err != nil {
 		return
 	}
